@@ -32,3 +32,15 @@ jobs:
 
       - name: Build application
         run: npm run build
+
+      - name: Build Docker image
+        run: docker build -t zuri-backend:ci .
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: zuri-backend:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
