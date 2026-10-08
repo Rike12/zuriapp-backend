@@ -2,11 +2,45 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const products = require("./data/products");
+const client = require("prom-client");
+client.collectDefaultMetrics();
+
+const httpRequestsTotal = new client.Counter({
+  name: "http_requests_total",
+  help: "Total HTTP requests",
+  labelNames: ["method", "route", "status_code"],
+});
+
+const httpRequestDuration = new client.Histogram({
+  name: "http_request_duration_seconds",
+  help: "HTTP request duration in seconds",
+  labelNames: ["method", "route", "status_code"],
+  buckets: [0.005, 0.01, 0.05, 0.1, 0.5, 1, 2, 5],
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const API_SECRET_KEY = process.env.API_SECRET_KEY;
 const STORE_NAME = process.env.STORE_NAME || "My Store";
+
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+
+  res.on("finish", () => {
+    const duration = Number(process.hrtime.bigint() - start) / 1e9;
+    const route = req.route?.path || req.path;
+    const labels = {
+      method: req.method,
+      route,
+      status_code: String(res.statusCode),
+    };
+
+    httpRequestsTotal.inc(labels);
+    httpRequestDuration.observe(labels, duration);
+  });
+
+  next();
+});
 
 app.use(cors());
 app.use(express.json());
@@ -18,6 +52,17 @@ const validateApiKey = (req, res, next) => {
   }
   next();
 };
+
+// GET /metrics — Prometheus metrics
+app.get("/metrics", async (req, res) => {
+  res.set("Content-Type", client.register.contentType);
+  res.end(await client.register.metrics());
+});
+
+// GET /health — application health check
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok" });
+});
 
 // GET /api/store — store info
 app.get("/api/store", (req, res) => {
