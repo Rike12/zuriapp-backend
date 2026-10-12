@@ -19,6 +19,7 @@ const httpRequestDuration = new client.Histogram({
 });
 
 const app = express();
+app.disable("x-powered-by");
 const PORT = process.env.PORT || 5000;
 const API_SECRET_KEY = process.env.API_SECRET_KEY;
 const STORE_NAME = process.env.STORE_NAME || "My Store";
@@ -42,9 +43,13 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(cors());
-app.use(express.json());
+app.use(
+  cors({
+    origin: ["http://localhost:3000"],
+  })
+);
 
+app.use(express.json());
 const validateApiKey = (req, res, next) => {
   const key = req.headers["x-api-key"];
   if (!key || key !== API_SECRET_KEY) {
