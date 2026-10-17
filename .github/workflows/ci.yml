@@ -1,0 +1,67 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build application
+        run: npm run build
+
+      - name: Build Docker image
+        run: docker build -t zuri-backend:ci .
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: zuri-backend:ci
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/rike12/zuriapp-backend:${{ github.sha }}
+            ghcr.io/rike12/zuriapp-backend:latest
